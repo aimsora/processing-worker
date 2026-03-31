@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import Ajv from "ajv";
+import addFormats from "ajv-formats";
 import type { NormalizedSourceEvent, RawSourceEvent } from "../types";
 
 export function createSchemaValidators(sharedContractsDir: string) {
@@ -12,6 +13,7 @@ export function createSchemaValidators(sharedContractsDir: string) {
   );
 
   const ajv = new Ajv({ allErrors: true });
+  addFormats(ajv);
   const rawValidate = ajv.compile<RawSourceEvent>(rawSchema);
   const normalizedValidate = ajv.compile<NormalizedSourceEvent>(normalizedSchema);
 

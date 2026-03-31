@@ -5,18 +5,21 @@ mutation IngestNormalizedItem($input: IngestNormalizedItemInput!) {
   ingestNormalizedItem(input: $input) {
     accepted
     idempotencyKey
+    procurementId
   }
 }
 `;
 
 export async function sendToBackend(
   graphqlUrl: string,
+  ingestToken: string,
   event: NormalizedSourceEvent
 ): Promise<void> {
   const response = await fetch(graphqlUrl, {
     method: "POST",
     headers: {
-      "content-type": "application/json"
+      "content-type": "application/json",
+      "x-ingest-token": ingestToken
     },
     body: JSON.stringify({
       query: INGEST_MUTATION,
@@ -25,13 +28,18 @@ export async function sendToBackend(
           externalId: event.externalId,
           source: event.source,
           title: event.title,
+          description: event.description,
           customer: event.customer,
           supplier: event.supplier,
           amount: event.amount,
           currency: event.currency,
           publishedAt: event.publishedAt,
+          deadlineAt: event.deadlineAt,
           payloadVersion: event.payloadVersion,
-          rawPayload: { rawRef: event.rawRef, eventId: event.eventId }
+          sourceUrl: event.sourceUrl,
+          status: event.status,
+          rawPayload: { rawRef: event.rawRef, eventId: event.eventId },
+          rawEvent: event.rawEvent
         }
       }
     })
