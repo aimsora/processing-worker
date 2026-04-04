@@ -11,7 +11,7 @@ const envSchema = z.object({
   QUEUE_RETRY_EVENT: z.string().default("source.raw.retry.v1"),
   QUEUE_DEAD_LETTER_EVENT: z.string().default("source.raw.dlq.v1"),
   QUEUE_NORMALIZED_EVENT: z.string().default("source.normalized.v1"),
-  SHARED_CONTRACTS_DIR: z.string().default("../shared-contracts"),
+  SHARED_CONTRACTS_DIR: z.string().default("../contracts"),
   RETRY_ATTEMPTS: z.coerce.number().int().positive().default(5),
   RETRY_BASE_DELAY_MS: z.coerce.number().int().positive().default(5000),
   PREFETCH: z.coerce.number().int().positive().default(10)

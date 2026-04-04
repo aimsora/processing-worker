@@ -2,7 +2,7 @@
   "name": "processing-worker",
   "version": "1.0.0",
   "private": true,
-  "description": "Production-ready normalization worker for AIMSORA with retry/DLQ handling and strict contract validation.",
+  "description": "Production-ready normalization worker for NPPWEB with retry/DLQ handling and strict contract validation.",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
