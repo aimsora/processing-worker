@@ -75,6 +75,17 @@ function normalizeEisRawEvent(input: RawSourceEvent): NormalizedSourceEvent {
     toStringOrUndefined(raw.externalUrl) ??
     toStringOrUndefined(raw.sourcePageUrl) ??
     input.url;
+  const publishedAt = toStringOrUndefined(raw.publishedAt) ?? input.collectedAt;
+  const targetStationName =
+    toStringOrUndefined(raw.targetStationName) ??
+    resolveStationNameFromText([
+      toStringOrUndefined(raw.title),
+      toStringOrUndefined(raw.description),
+      toStringOrUndefined(raw.customerName),
+      toStringOrUndefined(raw.supplierName),
+      toStringOrUndefined(raw.matchedQuery)
+    ]);
+  const sourceType = toStringOrUndefined(raw.sourceType) ?? "procurement";
 
   return {
     eventId: input.eventId,
@@ -89,21 +100,26 @@ function normalizeEisRawEvent(input: RawSourceEvent): NormalizedSourceEvent {
     supplier: toStringOrUndefined(raw.supplierName),
     amount: toNumberOrUndefined(raw.initialPrice),
     currency: toStringOrUndefined(raw.currency) ?? "RUB",
-    publishedAt: toStringOrUndefined(raw.publishedAt) ?? input.collectedAt,
+    publishedAt,
     deadlineAt: toStringOrUndefined(raw.applicationDeadline),
     normalizedAt: new Date().toISOString(),
     sourceUrl,
     status: normalizeEisStatus(toStringOrUndefined(raw.status)),
     rawRef: toStringOrUndefined(raw.rawArtifactUrl) ?? sourceUrl,
     sourceSpecificData: {
-      sourceType: toStringOrUndefined(raw.sourceType) ?? "procurement",
+      sourceType,
       portalName: toStringOrUndefined(raw.portalName) ?? resolveEisPortalName(input.source),
       matchedQuery: toStringOrUndefined(raw.matchedQuery),
-      targetStationName: toStringOrUndefined(raw.targetStationName),
+      targetStationName,
       region: toStringOrUndefined(raw.region),
       customerName: toStringOrUndefined(raw.customerName),
       supplierName: toStringOrUndefined(raw.supplierName),
-      collectedAt: toStringOrUndefined(raw.collectedAt) ?? input.collectedAt
+      collectedAt: toStringOrUndefined(raw.collectedAt) ?? input.collectedAt,
+      isNppRelated: Boolean(targetStationName),
+      publishedMonth: toMonthKey(publishedAt),
+      customerNormalized: normalizeEntityName(toStringOrUndefined(raw.customerName)),
+      supplierNormalized: normalizeEntityName(toStringOrUndefined(raw.supplierName)),
+      analyticsCategory: sourceType === "contract" ? "contract_execution" : "procurement_notice"
     },
     rawEvent: {
       eventId: input.eventId,
@@ -227,6 +243,7 @@ function normalizeRnpRawEvent(input: RawSourceEvent): NormalizedSourceEvent {
   const legalBasis = toStringOrUndefined(raw.legalBasis);
   const region = toStringOrUndefined(raw.region);
   const reason = toStringOrUndefined(raw.reason);
+  const activeRegistryEntry = normalizeRegistryStatus(registryStatus, exclusionDate) === "ACTIVE";
 
   return {
     eventId: input.eventId,
@@ -257,7 +274,12 @@ function normalizeRnpRawEvent(input: RawSourceEvent): NormalizedSourceEvent {
       sourceType: "registry",
       reason,
       customerName,
-      collectedAt: toStringOrUndefined(raw.collectedAt) ?? input.collectedAt
+      collectedAt: toStringOrUndefined(raw.collectedAt) ?? input.collectedAt,
+      activeRegistryEntry,
+      reasonCategory: deriveRegistryReasonCategory(reason, legalBasis),
+      supplierNormalized: normalizeEntityName(supplierName),
+      customerNormalized: normalizeEntityName(customerName),
+      daysUntilExclusion: calculateDaysUntil(exclusionDate)
     },
     rawEvent: {
       eventId: input.eventId,
@@ -339,7 +361,22 @@ function normalizeFedresursRawEvent(input: RawSourceEvent): NormalizedSourceEven
     rawRef: toStringOrUndefined(raw.rawArtifactUrl) ?? sourceUrl,
     sourceSpecificData: {
       sourceType: "bankruptcy",
-      collectedAt: toStringOrUndefined(raw.collectedAt) ?? input.collectedAt
+      collectedAt: toStringOrUndefined(raw.collectedAt) ?? input.collectedAt,
+      supplierNormalized: normalizeEntityName(supplier),
+      riskDomain: deriveFedresursRiskDomain({
+        messageType,
+        bankruptcyStage,
+        title,
+        description
+      }),
+      severityScore: toSeverityScore(
+        deriveFedresursRiskLevel({
+          messageType,
+          bankruptcyStage,
+          title,
+          description
+        })
+      )
     },
     rawEvent: {
       eventId: input.eventId,
@@ -407,6 +444,8 @@ function normalizeFnsRawEvent(input: RawSourceEvent): NormalizedSourceEvent {
     toStringOrUndefined(raw.externalUrl) ??
     toStringOrUndefined(raw.sourcePageUrl) ??
     input.url;
+  const registrationDate = toStringOrUndefined(raw.registrationDate);
+  const companyAgeYears = calculateCompanyAgeYears(registrationDate);
 
   return {
     eventId: input.eventId,
@@ -425,7 +464,7 @@ function normalizeFnsRawEvent(input: RawSourceEvent): NormalizedSourceEvent {
     normalizedAt: new Date().toISOString(),
     sourceUrl,
     status: raw.liquidationMark === true ? "ARCHIVED" : "ACTIVE",
-    registrationDate: toStringOrUndefined(raw.registrationDate),
+    registrationDate,
     companyStatus,
     address: toStringOrUndefined(raw.address),
     okved: toStringOrUndefined(raw.okved),
@@ -435,7 +474,19 @@ function normalizeFnsRawEvent(input: RawSourceEvent): NormalizedSourceEvent {
     sourceSpecificData: {
       sourceType: "company",
       collectedAt: toStringOrUndefined(raw.collectedAt) ?? input.collectedAt,
-      lookupQuery: toStringOrUndefined(raw.lookupQuery)
+      lookupQuery: toStringOrUndefined(raw.lookupQuery),
+      companyNameNormalized: normalizeEntityName(companyName),
+      shortNameNormalized: normalizeEntityName(shortName),
+      isActiveCompany: companyStatus ? !companyStatus.toLowerCase().includes("прекращ") : !raw.liquidationMark,
+      companyAgeYears,
+      profileCompleteness: calculateProfileCompleteness({
+        inn: toStringOrUndefined(raw.inn),
+        ogrn: toStringOrUndefined(raw.ogrn),
+        address: toStringOrUndefined(raw.address),
+        okved: toStringOrUndefined(raw.okved),
+        region: toStringOrUndefined(raw.region),
+        companyStatus
+      })
     },
     rawEvent: {
       eventId: input.eventId,
@@ -515,4 +566,187 @@ function normalizeGistorgiStatus(status: string | undefined): NormalizedSourceEv
   }
 
   return "ACTIVE";
+}
+
+function normalizeEntityName(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const normalized = value
+    .toLowerCase()
+    .replace(/[\"'`«»().,]/g, " ")
+    .replace(/\b(ооо|ао|пао|зао|ип|оао|нпо|фгуп|муп|гуп)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return normalized || undefined;
+}
+
+function toMonthKey(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const parsed = new Date(value);
+
+  if (!Number.isFinite(parsed.getTime())) {
+    return undefined;
+  }
+
+  return `${parsed.getUTCFullYear()}-${String(parsed.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function calculateDaysUntil(value: string | undefined): number | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const parsed = new Date(value);
+
+  if (!Number.isFinite(parsed.getTime())) {
+    return undefined;
+  }
+
+  return Math.ceil((parsed.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+}
+
+function deriveRegistryReasonCategory(reason: string | undefined, legalBasis: string | undefined): string {
+  const haystack = [reason, legalBasis].filter(Boolean).join(" ").toLowerCase();
+
+  if (haystack.includes("уклон")) {
+    return "EVASION";
+  }
+
+  if (haystack.includes("расторж")) {
+    return "TERMINATION";
+  }
+
+  if (haystack.includes("недостовер")) {
+    return "MISREPRESENTATION";
+  }
+
+  return "OTHER";
+}
+
+function deriveFedresursRiskDomain(input: {
+  messageType?: string;
+  bankruptcyStage?: string;
+  title?: string;
+  description?: string;
+}): string {
+  const haystack = [input.messageType, input.bankruptcyStage, input.title, input.description]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (haystack.includes("банкрот") || haystack.includes("несостоятель")) {
+    return "BANKRUPTCY";
+  }
+
+  if (haystack.includes("ликвидац")) {
+    return "LIQUIDATION";
+  }
+
+  if (haystack.includes("торг") || haystack.includes("имуществ")) {
+    return "ASSET_SALE";
+  }
+
+  return "GENERAL";
+}
+
+function toSeverityScore(level: NormalizedSourceEvent["riskLevel"] | undefined): number {
+  switch (level) {
+    case "CRITICAL":
+      return 100;
+    case "HIGH":
+      return 75;
+    case "MEDIUM":
+      return 50;
+    case "LOW":
+      return 25;
+    default:
+      return 0;
+  }
+}
+
+function calculateCompanyAgeYears(registrationDate: string | undefined): number | undefined {
+  if (!registrationDate) {
+    return undefined;
+  }
+
+  const parsed = new Date(registrationDate);
+
+  if (!Number.isFinite(parsed.getTime())) {
+    return undefined;
+  }
+
+  return Math.max(0, Math.floor((Date.now() - parsed.getTime()) / (365.25 * 24 * 60 * 60 * 1000)));
+}
+
+function calculateProfileCompleteness(input: {
+  inn?: string;
+  ogrn?: string;
+  address?: string;
+  okved?: string;
+  region?: string;
+  companyStatus?: string;
+}): number {
+  const fields = [input.inn, input.ogrn, input.address, input.okved, input.region, input.companyStatus];
+  const filled = fields.filter((item) => Boolean(item)).length;
+
+  return Math.round((filled / fields.length) * 100);
+}
+
+function resolveStationNameFromText(values: Array<string | undefined>): string | undefined {
+  const haystack = values.filter(Boolean).join(" ").toLowerCase();
+
+  if (!haystack) {
+    return undefined;
+  }
+
+  const stations = [
+    {
+      canonical: "Балаковская атомная станция",
+      variants: ["балаковская атомная станция", "балаковская аэс", "балаковская аэс-авто"]
+    },
+    {
+      canonical: "Белоярская атомная станция",
+      variants: ["белоярская атомная станция", "белоярская аэс"]
+    },
+    {
+      canonical: "Билибинская атомная станция",
+      variants: ["билибинская атомная станция", "билибинская аэс"]
+    },
+    {
+      canonical: "Калининская атомная станция",
+      variants: ["калининская атомная станция", "калининская аэс", "калининская аэс-сервис"]
+    },
+    {
+      canonical: "Кольская атомная станция",
+      variants: ["кольская атомная станция", "кольская аэс"]
+    },
+    {
+      canonical: "Курская атомная станция",
+      variants: ["курская атомная станция", "курская аэс", "курская аэс-сервис"]
+    },
+    {
+      canonical: "Ленинградская атомная станция",
+      variants: ["ленинградская атомная станция", "ленинградская аэс", "ленинградская аэс-авто"]
+    },
+    {
+      canonical: "Нововоронежская атомная станция",
+      variants: ["нововоронежская атомная станция", "нововоронежская аэс"]
+    },
+    {
+      canonical: "Ростовская атомная станция",
+      variants: ["ростовская атомная станция", "ростовская аэс"]
+    },
+    {
+      canonical: "Смоленская атомная станция",
+      variants: ["смоленская атомная станция", "смоленская аэс", "смоленская аэс-сервис"]
+    }
+  ] as const;
+
+  return stations.find((station) => station.variants.some((variant) => haystack.includes(variant)))?.canonical;
 }
