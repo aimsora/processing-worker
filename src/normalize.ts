@@ -75,7 +75,7 @@ export function normalizeRawEvent(input: RawSourceEvent): NormalizedSourceEvent 
     customer: toStringOrUndefined(raw.customer) ?? toStringOrUndefined(raw.buyer),
     supplier: toStringOrUndefined(raw.supplier),
     amount: toNumberOrUndefined(raw.amount),
-    currency: toStringOrUndefined(raw.currency) ?? "RUB",
+    currency: normalizeCurrencyCode(raw.currency) ?? "RUB",
     publishedAt: toStringOrUndefined(raw.publishedAt) ?? input.collectedAt,
     deadlineAt: toStringOrUndefined(raw.deadlineAt),
     normalizedAt: new Date().toISOString(),
@@ -181,7 +181,7 @@ function normalizeEisRawEvent(input: RawSourceEvent): NormalizedSourceEvent {
     customer: customerName,
     supplier: supplierName,
     amount: toNumberOrUndefined(raw.initialPrice),
-    currency: toStringOrUndefined(raw.currency) ?? "RUB",
+    currency: normalizeCurrencyCode(raw.currency) ?? "RUB",
     publishedAt,
     deadlineAt: toStringOrUndefined(raw.applicationDeadline),
     normalizedAt: new Date().toISOString(),
@@ -252,7 +252,7 @@ function normalizeEasuzRawEvent(input: RawSourceEvent): NormalizedSourceEvent {
     customer: toStringOrUndefined(raw.customerName),
     supplier: undefined,
     amount: toNumberOrUndefined(raw.initialPrice),
-    currency: toStringOrUndefined(raw.currency) ?? "RUB",
+    currency: normalizeCurrencyCode(raw.currency) ?? "RUB",
     publishedAt: toStringOrUndefined(raw.publishedAt) ?? input.collectedAt,
     deadlineAt: toStringOrUndefined(raw.applicationDeadline),
     normalizedAt: new Date().toISOString(),
@@ -286,6 +286,42 @@ function toStringOrUndefined(value: unknown): string | undefined {
 
 function toNumberOrUndefined(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function normalizeCurrencyCode(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const normalized = value.trim().toUpperCase();
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (
+    normalized.includes("RUB") ||
+    normalized.includes("RUR") ||
+    normalized.includes("РУБ") ||
+    normalized.includes("₽") ||
+    normalized.includes("РОССИЙСКИЙ РУБЛЬ")
+  ) {
+    return "RUB";
+  }
+
+  if (normalized.includes("USD") || normalized.includes("$") || normalized.includes("ДОЛЛАР")) {
+    return "USD";
+  }
+
+  if (normalized.includes("EUR") || normalized.includes("€") || normalized.includes("ЕВРО")) {
+    return "EUR";
+  }
+
+  if (normalized.includes("CNY") || normalized.includes("ЮАН")) {
+    return "CNY";
+  }
+
+  const codeMatch = normalized.match(/\b[A-Z]{3}\b/);
+  return codeMatch?.[0];
 }
 
 function normalizeEisStatus(status: string | undefined): NormalizedSourceEvent["status"] {

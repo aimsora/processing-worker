@@ -178,6 +178,34 @@ describe("normalizeRawEvent", () => {
     });
   });
 
+  it("drops invalid currency labels from EIS contracts", () => {
+    const input: RawSourceEvent = {
+      eventId: "evt-eis-contract-bad-currency",
+      runKey: "eis-contracts-run",
+      source: "eis_contracts_223",
+      collectedAt: "2026-04-10T10:00:00.000Z",
+      url: "https://zakupki.gov.ru/epz/contractfz223/card/contract-info.html?id=999",
+      payloadVersion: "v1",
+      artifacts: [],
+      raw: {
+        externalId: "76439071143250001340000",
+        externalUrl: "https://zakupki.gov.ru/epz/contractfz223/card/contract-info.html?id=999",
+        title: "Текущий ремонт объектов Балаковской АЭС-Авто",
+        customerName: "ООО Балаковская АЭС-Авто",
+        portalName: "ЕИС / реестр договоров 223-ФЗ",
+        sourceType: "contract",
+        publishedAt: "2025-09-22T00:00:00+03:00",
+        initialPrice: 11201734,
+        currency: "ПОДЕЛИТЕСЬ"
+      }
+    };
+
+    const normalized = normalizeRawEvent(input);
+
+    expect(normalized.amount).toBe(11201734);
+    expect(normalized.currency).toBe("RUB");
+  });
+
   it("normalizes rnp payload using registry-specific fields", () => {
     const input: RawSourceEvent = {
       eventId: "evt-4",
